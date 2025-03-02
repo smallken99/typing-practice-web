@@ -2,7 +2,7 @@
 <html lang="zh-TW" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <title>打字練習程式</title>
+    <title id="page_title">打字練習程式</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -26,11 +26,11 @@
             color: #e0e0e0;
             border: 1px solid #444;
             overflow-y: auto;
-            white-space: pre-wrap; /* 保持文字換行 */
+            white-space: pre-wrap;
         }
         .highlight-error {
-            background-color: #ffff00; /* 反黃 */
-            color: #000000; /* 黑色文字以對比 */
+            background-color: #ffff00;
+            color: #000000;
         }
         .status_row {
             display: flex;
@@ -44,25 +44,29 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center mb-4">打字練習程式</h1>
+        <h1 class="text-center mb-4" id="main_title">打字練習程式</h1>
         <div class="mb-3">
-            <label for="sample_text" class="form-label">題目：</label>
+            <label for="sample_text" class="form-label" id="question_label">題目：</label>
             <div id="sample_text" class="form-control" contenteditable="false"></div>
         </div>
         <div class="mb-3">
-            <label for="input_text" class="form-label">請輸入：</label>
+            <label for="input_text" class="form-label" id="input_label">請輸入：</label>
             <textarea class="form-control" id="input_text"></textarea>
         </div>
         <div class="mb-3">
-            <label for="word_count" class="form-label">輸入練習字數：</label>
+            <label for="word_count" class="form-label" id="word_count_label">輸入練習字數：</label>
             <div class="input-group">
                 <input type="text" class="form-control" id="word_count" placeholder="例如：50">
-                <button class="btn btn-primary" onclick="generateQuestions()">生成題目</button>
+                <select id="language_select" class="form-select" style="width: auto;">
+                    <option value="chinese" selected>Chinese</option>
+                    <option value="english">English</option>
+                </select>
+                <button class="btn btn-primary" id="generate_button" onclick="generateQuestions()">生成題目</button>
             </div>
         </div>
         <div class="mb-3">
             <input type="file" id="file_input" class="form-control" accept=".txt" style="display: inline-block; width: auto;">
-            <button class="btn btn-secondary" onclick="uploadFile()">上傳題庫</button>
+            <button class="btn btn-secondary" id="upload_button" onclick="uploadFile()">上傳題庫</button>
             <button class="btn btn-success" id="start_button" onclick="startPractice()">開始練習</button>
             <button class="btn btn-danger" id="stop_button" onclick="stopPractice()" disabled>停止練習</button>
         </div>
@@ -82,21 +86,91 @@
         let totalChars = 0;
         let timer = null;
 
+        // 語言表
+        const languageText = {
+            chinese: {
+                page_title: "打字練習程式",
+                main_title: "打字練習程式",
+                question_label: "題目：",
+                input_label: "請輸入：",
+                word_count_label: "輸入練習字數：",
+                word_count_placeholder: "例如：50",
+                generate_button: "生成題目",
+                upload_button: "上傳題庫",
+                start_button: "開始練習",
+                stop_button: "停止練習",
+                status_initial: "打字速度：0 字/分鐘 | 準確率：0%",
+                cangjie_initial: "倉頡碼：點擊題目中的字來查詢",
+                generate_message: "已生成 {total_chars} 字題目，點擊「開始練習」開始",
+                upload_message: "已上傳 {total_chars} 字題目，點擊「開始練習」開始",
+                stop_message: "練習已停止，最終打字速度：{speed} 字/分鐘",
+                complete_message: "練習完成！最終打字速度：{speed} 字/分鐘",
+                no_questions: "請先生成或上傳題目"
+            },
+            english: {
+                page_title: "Typing Practice",
+                main_title: "Typing Practice",
+                question_label: "Question:",
+                input_label: "Please type here:",
+                word_count_label: "Number of characters to practice:",
+                word_count_placeholder: "e.g., 50",
+                generate_button: "Generate Questions",
+                upload_button: "Upload Questions",
+                start_button: "Start Practice",
+                stop_button: "Stop Practice",
+                status_initial: "Typing Speed: 0 wpm | Accuracy: 0%",
+                cangjie_initial: "Cangjie: Click a character in the question to check",
+                generate_message: "Generated {total_chars} characters, click \"Start Practice\" to begin",
+                upload_message: "Uploaded {total_chars} characters, click \"Start Practice\" to begin",
+                stop_message: "Practice stopped, final speed: {speed} wpm",
+                complete_message: "Practice completed! Final speed: {speed} wpm",
+                no_questions: "Please generate or upload questions first"
+            }
+        };
+
+        // 更新界面語言
+        function updateInterfaceLanguage(language) {
+            const texts = languageText[language];
+            document.getElementById('page_title').textContent = texts.page_title;
+            document.getElementById('main_title').textContent = texts.main_title;
+            document.getElementById('question_label').textContent = texts.question_label;
+            document.getElementById('input_label').textContent = texts.input_label;
+            document.getElementById('word_count_label').textContent = texts.word_count_label;
+            document.getElementById('word_count').placeholder = texts.word_count_placeholder;
+            document.getElementById('generate_button').textContent = texts.generate_button;
+            document.getElementById('upload_button').textContent = texts.upload_button;
+            document.getElementById('start_button').textContent = texts.start_button;
+            document.getElementById('stop_button').textContent = texts.stop_button;
+            document.getElementById('status_label').textContent = texts.status_initial;
+            updateCangjieLabel(language);
+        }
+
         document.getElementById('sample_text').addEventListener('click', function(e) {
-            const text = questions[currentQuestionIndex];
-            const range = window.getSelection().getRangeAt(0);
-            const cursorPos = range.startOffset;
-            if (cursorPos >= 0 && cursorPos < text.length) {
-                const char = text[cursorPos];
-                fetch('/get_cangjie', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ char: char })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('cangjie_label').textContent = `倉頡碼：${data.char} - ${data.cangjie}`;
-                });
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const text = questions[currentQuestionIndex];
+                const cursorPos = range.startOffset;
+                if (cursorPos >= 0 && cursorPos < text.length) {
+                    const char = text[cursorPos];
+                    const language = document.getElementById('language_select').value;
+                    if (language === 'chinese') {
+                        fetch('/get_cangjie', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ char: char })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('cangjie_label').textContent = 
+                                `${languageText[language].cangjie_initial.split(':')[0]}: ${data.char} - ${data.cangjie}`;
+                        })
+                        .catch(error => {
+                            document.getElementById('cangjie_label').textContent = 
+                                `${languageText[language].cangjie_initial.split(':')[0]}: 查詢失敗 (${error.message})`;
+                        });
+                    }
+                }
             }
         });
 
@@ -107,17 +181,20 @@
 
         function generateQuestions() {
             const wordCount = document.getElementById('word_count').value;
+            const language = document.getElementById('language_select').value;
             fetch('/generate_questions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ word_count: wordCount })
+                body: JSON.stringify({ word_count: wordCount, language: language })
             })
             .then(response => response.json())
             .then(data => {
                 questions = data.questions;
                 currentQuestionIndex = 0;
                 document.getElementById('sample_text').textContent = questions[0];
-                document.getElementById('status_label').textContent = `已生成 ${data.total_chars} 字題目，點擊「開始練習」開始`;
+                document.getElementById('status_label').textContent = 
+                    languageText[language].generate_message.replace('{total_chars}', data.total_chars);
+                updateCangjieLabel(language);
             });
         }
 
@@ -125,7 +202,7 @@
             const fileInput = document.getElementById('file_input');
             const file = fileInput.files[0];
             if (!file) {
-                alert("請選擇一個 .txt 檔案");
+                alert(languageText[document.getElementById('language_select').value].no_questions);
                 return;
             }
 
@@ -146,16 +223,20 @@
                 questions = data.questions;
                 currentQuestionIndex = 0;
                 document.getElementById('sample_text').textContent = questions[0];
-                document.getElementById('status_label').textContent = `已上傳 ${data.total_chars} 字題目，點擊「開始練習」開始`;
+                document.getElementById('status_label').textContent = 
+                    languageText[document.getElementById('language_select').value].upload_message.replace('{total_chars}', data.total_chars);
+                const language = document.getElementById('language_select').value;
+                updateCangjieLabel(language);
             })
             .catch(error => {
-                alert(`上傳失敗：${error.message}`);
+                alert(`Upload failed: ${error.message}`);
             });
         }
 
         function startPractice() {
             if (questions.length === 0) {
-                document.getElementById('status_label').textContent = "請先生成或上傳題目";
+                document.getElementById('status_label').textContent = 
+                    languageText[document.getElementById('language_select').value].no_questions;
                 return;
             }
             startTime = Date.now();
@@ -164,7 +245,7 @@
             const inputText = document.getElementById('input_text');
             inputText.value = '';
             inputText.disabled = false;
-            inputText.focus(); // 自動將焦點設置到輸入框
+            inputText.focus();
             document.getElementById('start_button').disabled = true;
             document.getElementById('stop_button').disabled = false;
             document.getElementById('sample_text').textContent = questions[0];
@@ -184,20 +265,23 @@
                 const typedText = document.getElementById('input_text').value;
                 totalChars += typedText.length;
                 const finalSpeed = totalTime > 0 ? Math.round(totalChars / (totalTime / 60)) : 0;
-                document.getElementById('status_label').textContent = `練習已停止，最終打字速度：${finalSpeed} 字/分鐘`;
+                const language = document.getElementById('language_select').value;
+                document.getElementById('status_label').textContent = 
+                    languageText[language].stop_message.replace('{speed}', finalSpeed);
                 startTime = null;
             }
             document.getElementById('input_text').disabled = true;
             document.getElementById('start_button').disabled = false;
             document.getElementById('stop_button').disabled = true;
             document.getElementById('sample_text').textContent = questions[currentQuestionIndex] || '';
-            document.getElementById('cangjie_label').textContent = "倉頡碼：點擊題目中的字來查詢";
+            const language = document.getElementById('language_select').value;
+            updateCangjieLabel(language);
         }
 
         function checkTyping(typedText) {
             const currentQuestion = questions[currentQuestionIndex];
             const sampleText = document.getElementById('sample_text');
-            sampleText.innerHTML = ''; // 清空現有內容
+            sampleText.innerHTML = '';
 
             if (typedText.length > currentQuestion.length) {
                 sampleText.textContent = currentQuestion;
@@ -225,7 +309,8 @@
         function showNextCangjieCode(typedText) {
             const currentQuestion = questions[currentQuestionIndex];
             const nextPos = typedText.length;
-            if (nextPos < currentQuestion.length) {
+            const language = document.getElementById('language_select').value;
+            if (language === 'chinese' && nextPos < currentQuestion.length) {
                 const nextChar = currentQuestion[nextPos];
                 fetch('/get_cangjie', {
                     method: 'POST',
@@ -235,10 +320,16 @@
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('cangjie_label').textContent = 
-                        `下一個字倉頡碼：${data.char} - ${data.cangjie}`;
+                        `倉頡碼: ${data.char} - ${data.cangjie}`;
+                })
+                .catch(error => {
+                    document.getElementById('cangjie_label').textContent = 
+                        `倉頡碼: 查詢失敗 (${error.message})`;
                 });
+            } else if (nextPos >= currentQuestion.length) {
+                document.getElementById('cangjie_label').textContent = language === 'chinese' ? "當前題目已完成" : "Current question completed";
             } else {
-                document.getElementById('cangjie_label').textContent = "已完成當前題目";
+                updateCangjieLabel(language);
             }
         }
 
@@ -253,14 +344,15 @@
                 document.getElementById('sample_text').textContent = questions[currentQuestionIndex];
                 const inputText = document.getElementById('input_text');
                 inputText.value = '';
-                inputText.focus(); // 換行後保持焦點
+                inputText.focus();
                 startTime = Date.now();
                 showNextCangjieCode('');
             } else {
                 const finalSpeed = totalTime > 0 ? Math.round(totalChars / (totalTime / 60)) : 0;
+                const language = document.getElementById('language_select').value;
                 document.getElementById('status_label').textContent = 
-                    `練習完成！最終打字速度：${finalSpeed} 字/分鐘`;
-                document.getElementById('cangjie_label').textContent = "練習完成";
+                    languageText[language].complete_message.replace('{speed}', finalSpeed);
+                document.getElementById('cangjie_label').textContent = language === 'chinese' ? "練習完成" : "Practice completed";
                 document.getElementById('input_text').disabled = true;
                 document.getElementById('start_button').disabled = false;
                 document.getElementById('stop_button').disabled = true;
@@ -283,10 +375,29 @@
                     acc + (char === currentQuestion[i] ? 1 : 0), 0);
                 const accuracy = currentQuestion.length > 0 ? 
                     (correctChars / currentQuestion.length) * 100 : 0;
+                const language = document.getElementById('language_select').value;
                 document.getElementById('status_label').textContent = 
-                    `打字速度：${speed} 字/分鐘 | 準確率：${accuracy.toFixed(1)}%`;
+                    language === 'chinese' 
+                        ? `打字速度：${speed} 字/分鐘 | 準確率：${accuracy.toFixed(1)}%`
+                        : `Typing Speed: ${speed} wpm | Accuracy: ${accuracy.toFixed(1)}%`;
             }
         }
+
+        function updateCangjieLabel(language) {
+            if (language === 'english') {
+                document.getElementById('cangjie_label').textContent = "Cangjie: Not applicable for English";
+            } else {
+                document.getElementById('cangjie_label').textContent = "倉頡碼：點擊題目中的字來查詢";
+            }
+        }
+
+        // 初始設置語言為中文
+        document.getElementById('language_select').addEventListener('change', function() {
+            updateInterfaceLanguage(this.value);
+        });
+
+        // 頁面載入時設置中文
+        updateInterfaceLanguage('chinese');
     </script>
 </body>
 </html>

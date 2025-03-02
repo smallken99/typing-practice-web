@@ -4,7 +4,7 @@ import time
 
 app = Flask(__name__)
 
-# 倉頡字根映射表
+# 倉頡字根映射表（改為中文字根）
 CANGJIE_ROOTS = {
     'a': '日', 'b': '月', 'c': '金', 'd': '木', 'e': '水', 
     'f': '火', 'g': '土', 'h': '竹', 'i': '戈', 'j': '十', 
@@ -14,18 +14,32 @@ CANGJIE_ROOTS = {
     'z': '重'
 }
 
-# 詞彙庫和模板
-NAMES = ["小明", "小紅", "小華", "小剛", "小麗"]
-PLACES = ["公園", "學校", "圖書館", "超市", "咖啡店"]
-ACTIONS = ["散步", "學習", "看書", "購物", "喝咖啡"]
-WEATHER = ["晴朗", "陰天", "下雨", "多雲", "刮風"]
-OBJECTS = ["書", "水果", "咖啡", "筆記本", "手機"]
-SENTENCE_TEMPLATES = [
+# 中文詞彙庫和模板
+CHINESE_NAMES = ["小明", "小紅", "小華", "小剛", "小麗"]
+CHINESE_PLACES = ["公園", "學校", "圖書館", "超市", "咖啡店"]
+CHINESE_ACTIONS = ["散步", "學習", "看書", "購物", "喝咖啡"]
+CHINESE_WEATHER = ["晴朗", "陰天", "下雨", "多雲", "刮風"]
+CHINESE_OBJECTS = ["書", "水果", "咖啡", "筆記本", "手機"]
+CHINESE_SENTENCE_TEMPLATES = [
     "{name}今天去了{place}，天氣很{weather}。",
     "{name}在{place}{action}，感覺很愉快。",
     "{name}買了一些{object}，準備帶回家。",
     "在{place}，{name}遇到了朋友，一起{action}。",
     "{name}覺得{weather}的日子最適合{action}。"
+]
+
+# 英文詞彙庫和模板
+ENGLISH_NAMES = ["Tom", "Mary", "John", "Alice", "Bob"]
+ENGLISH_PLACES = ["park", "school", "library", "supermarket", "cafe"]
+ENGLISH_ACTIONS = ["walking", "studying", "reading", "shopping", "drinking coffee"]
+ENGLISH_WEATHER = ["sunny", "cloudy", "rainy", "windy", "foggy"]
+ENGLISH_OBJECTS = ["book", "fruit", "coffee", "notebook", "phone"]
+ENGLISH_SENTENCE_TEMPLATES = [
+    "{name} went to the {place} today, and the weather was {weather}.",
+    "{name} is {action} at the {place} and feels very happy.",
+    "{name} bought some {object} to take home.",
+    "At the {place}, {name} met a friend and they started {action} together.",
+    "{name} thinks a {weather} day is perfect for {action}."
 ]
 
 # 載入倉頡碼表
@@ -50,9 +64,20 @@ def index():
 
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions():
-    word_count = int(request.json.get('word_count', 50))
+    data = request.json
+    word_count = int(data.get('word_count', 50))
+    language = data.get('language', 'chinese')
+
+    if language == 'english':
+        NAMES, PLACES, ACTIONS, WEATHER, OBJECTS, SENTENCE_TEMPLATES = (
+            ENGLISH_NAMES, ENGLISH_PLACES, ENGLISH_ACTIONS, ENGLISH_WEATHER, ENGLISH_OBJECTS, ENGLISH_SENTENCE_TEMPLATES
+        )
+    else:
+        NAMES, PLACES, ACTIONS, WEATHER, OBJECTS, SENTENCE_TEMPLATES = (
+            CHINESE_NAMES, CHINESE_PLACES, CHINESE_ACTIONS, CHINESE_WEATHER, CHINESE_OBJECTS, CHINESE_SENTENCE_TEMPLATES
+        )
+
     questions = []
-    current_text = ""
     total_chars = 0
     
     while total_chars < word_count:
@@ -64,17 +89,13 @@ def generate_questions():
             weather=random.choice(WEATHER),
             object=random.choice(OBJECTS)
         )
+        if len(sentence) > 30:
+            sentence = sentence[:30]
         if total_chars + len(sentence) > word_count:
             sentence = sentence[:word_count - total_chars]
-        if len(current_text) + len(sentence) > 30:
-            questions.append(current_text)
-            current_text = sentence
-        else:
-            current_text += sentence
+        
+        questions.append(sentence)
         total_chars += len(sentence)
-    
-    if current_text:
-        questions.append(current_text)
     
     return jsonify({'questions': questions, 'total_chars': total_chars})
 
@@ -94,7 +115,6 @@ def upload_file():
             questions = []
             for line in lines:
                 if len(line) > 30:
-                    # 若單行超過 30 字，分段處理
                     for i in range(0, len(line), 30):
                         questions.append(line[i:i+30])
                 else:
