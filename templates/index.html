@@ -1,83 +1,63 @@
 <!DOCTYPE html>
-<html lang="zh-TW" data-bs-theme="dark">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title id="page_title">打字練習程式</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        body {
-            padding: 20px;
-            background-color: #212529;
-        }
-        .container {
-            max-width: 800px;
-        }
-        textarea {
-            font-size: 16px;
-            height: 100px;
-            resize: none;
-        }
-        #sample_text {
-            font-size: 16px;
-            height: 100px;
-            padding: 8px;
-            background-color: #2d2d2d;
-            color: #e0e0e0;
-            border: 1px solid #444;
-            overflow-y: auto;
-            white-space: pre-wrap;
-        }
+        /* 自訂樣式補充 Tailwind 無法直接實現的部分 */
         .highlight-error {
-            background-color: #ffff00;
+            background-color: #ffff00; /* 錯誤高亮 */
             color: #000000;
         }
-        .status_row {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
+        #sample_text {
+            font-size: 32px !important; /* 強制 32px */
+            height: 120px;
         }
-        button {
-            font-size: 16px;
+        #input_text {
+            font-size: 32px !important; /* 強制 32px */
+            height: 120px;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <h1 class="text-center mb-4" id="main_title">打字練習程式</h1>
-        <div class="mb-3">
-            <label for="sample_text" class="form-label" id="question_label">題目：</label>
-            <div id="sample_text" class="form-control" contenteditable="false"></div>
+<body class="p-5 bg-gray-900 text-gray-200 font-sans">
+    <div class="container max-w-3xl mx-auto">
+        <h1 id="main_title" class="text-center mb-5 text-white text-3xl">打字練習程式</h1>
+        <div class="mb-4">
+            <label for="sample_text" id="question_label" class="block mb-1">題目：</label>
+            <div id="sample_text" contenteditable="false" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded overflow-y-auto whitespace-pre-wrap"></div>
         </div>
-        <div class="mb-3">
-            <label for="input_text" class="form-label" id="input_label">請輸入：</label>
-            <textarea class="form-control" id="input_text"></textarea>
+        <div class="mb-4">
+            <label for="input_text" id="input_label" class="block mb-1">請輸入：</label>
+            <textarea id="input_text" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded resize-none"></textarea>
         </div>
-        <div class="mb-3">
-            <label for="word_count" class="form-label" id="word_count_label">輸入練習字數：</label>
-            <div class="input-group">
-                <input type="text" class="form-control" id="word_count" placeholder="例如：50">
-                <select id="language_select" class="form-select" style="width: auto;">
+        <div class="mb-4">
+            <label for="word_count" id="word_count_label" class="block mb-1">輸入練習字數：</label>
+            <div class="flex items-center gap-2">
+                <input type="text" id="word_count" placeholder="例如：50" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-36">
+                <select id="language_select" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-28">
                     <option value="chinese" selected>Chinese</option>
                     <option value="english">English</option>
                 </select>
-                <button class="btn btn-primary" id="generate_button" onclick="generateQuestions()">生成題目</button>
+                <button id="generate_button" onclick="generateQuestions()" class="p-2 bg-blue-600 text-white rounded hover:bg-blue-700">生成題目</button>
             </div>
         </div>
-        <div class="mb-3">
-            <input type="file" id="file_input" class="form-control" accept=".txt" style="display: inline-block; width: auto;">
-            <button class="btn btn-secondary" id="upload_button" onclick="uploadFile()">上傳題庫</button>
-            <button class="btn btn-success" id="start_button" onclick="startPractice()">開始練習</button>
-            <button class="btn btn-danger" id="stop_button" onclick="stopPractice()" disabled>停止練習</button>
+        <div class="mb-4 flex gap-2">
+            <input type="file" id="file_input" accept=".txt" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded">
+            <button id="upload_button" onclick="uploadFile()" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600">上傳題庫</button>
+            <button id="start_button" onclick="startPractice()" class="p-2 bg-green-600 text-white rounded hover:bg-green-700">開始練習</button>
+            <button id="stop_button" onclick="stopPractice()" disabled class="p-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed">停止練習</button>
         </div>
-        <div class="status_row">
-            <span id="status_label" class="text-light">打字速度：0 字/分鐘 | 準確率：0%</span>
-            <span id="cangjie_label" class="text-light">倉頡碼：點擊題目中的字來查詢</span>
+        <div class="flex justify-between w-full mt-2">
+            <span id="status_label">打字速度：0 字/分鐘 | 準確率：0%</span>
+            <span id="cangjie_label">倉頡碼：點擊題目中的字來查詢</span>
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let questions = [];
         let currentQuestionIndex = 0;
@@ -396,8 +376,20 @@
             updateInterfaceLanguage(this.value);
         });
 
-        // 頁面載入時設置中文
+        // 頁面載入時設置中文並檢查字體
         updateInterfaceLanguage('chinese');
+
+        window.onload = function() {
+            const sampleText = document.getElementById('sample_text');
+            const inputText = document.getElementById('input_text');
+            const sampleFontSize = window.getComputedStyle(sampleText).fontSize;
+            const inputFontSize = window.getComputedStyle(inputText).fontSize;
+            console.log(`#sample_text 實際字體大小: ${sampleFontSize}`);
+            console.log(`#input_text 實際字體大小: ${inputFontSize}`);
+            if (sampleFontSize !== '32px' || inputFontSize !== '32px') {
+                alert('字體大小未正確設為 32px，請檢查控制台訊息');
+            }
+        };
     </script>
 </body>
 </html>

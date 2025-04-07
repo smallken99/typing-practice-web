@@ -115,9 +115,9 @@ def upload_file():
             lines = [line.strip() for line in content.split('\n') if line.strip()]
             questions = []
             for line in lines:
-                if len(line) > 30:
-                    for i in range(0, len(line), 30):
-                        questions.append(line[i:i+30])
+                if len(line) > 20:
+                    for i in range(0, len(line), 20):
+                        questions.append(line[i:i+20])
                 else:
                     questions.append(line)
             total_chars = sum(len(q) for q in questions)
