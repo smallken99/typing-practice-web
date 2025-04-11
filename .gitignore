@@ -1,0 +1,9 @@
+# 忽略 questions.json
+questions.json
+
+# 忽略 uploads 目錄及其內容
+uploads/
+
+# 其他常見忽略規則（可選）
+*.pyc
+__pycache__/
