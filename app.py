@@ -48,8 +48,9 @@ ENGLISH_SENTENCE_TEMPLATES = [
 
 # 載入倉頡碼表
 cangjie_dict = {}
+file_path = os.path.join("static", "dime_cangjie.txt")
 try:
-    with open("dime_cangjie.txt", "r", encoding="utf-8") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):
