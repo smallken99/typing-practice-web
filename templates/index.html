@@ -9,52 +9,98 @@
     <!-- Tailwind CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
-        /* 自訂樣式補充 Tailwind 無法直接實現的部分 */
         .highlight-error {
-            background-color: #ffff00; /* 錯誤高亮 */
+            background-color: #ffff00;
             color: #000000;
         }
         #sample_text {
-            font-size: 32px !important; /* 強制 32px */
+            font-size: 32px !important;
             height: 120px;
         }
         #input_text {
-            font-size: 32px !important; /* 強制 32px */
+            font-size: 32px !important;
             height: 120px;
+        }
+        .tab-button {
+            padding: 0.5rem 1rem;
+            background-color: #4a5568;
+            color: #e2e8f0;
+            border-radius: 0.25rem 0.25rem 0 0;
+            cursor: pointer;
+        }
+        .tab-button.active {
+            background-color: #2d3748;
+            color: #ffffff;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
 <body class="p-5 bg-gray-900 text-gray-200 font-sans">
-    <div class="container max-w-3xl mx-auto">
+    <div class="container max-w-4xl mx-auto">
         <h1 id="main_title" class="text-center mb-5 text-white text-3xl">打字練習程式</h1>
-        <div class="mb-4">
-            <label for="sample_text" id="question_label" class="block mb-1">題目：</label>
-            <div id="sample_text" contenteditable="false" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded overflow-y-auto whitespace-pre-wrap"></div>
+        
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-600 mb-4">
+            <button id="practice_tab" class="tab-button active" onclick="switchTab('practice')">打字練習</button>
+            <button id="management_tab" class="tab-button" onclick="switchTab('management')">題目管理</button>
         </div>
-        <div class="mb-4">
-            <label for="input_text" id="input_label" class="block mb-1">請輸入：</label>
-            <textarea id="input_text" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded resize-none"></textarea>
-        </div>
-        <div class="mb-4">
-            <label for="word_count" id="word_count_label" class="block mb-1">輸入練習字數：</label>
-            <div class="flex items-center gap-2">
-                <input type="text" id="word_count" placeholder="例如：50" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-36">
-                <select id="language_select" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-28">
-                    <option value="chinese" selected>Chinese</option>
-                    <option value="english">English</option>
-                </select>
-                <button id="generate_button" onclick="generateQuestions()" class="p-2 bg-blue-600 text-white rounded hover:bg-blue-700">生成題目</button>
+
+        <!-- Tab Content -->
+        <!-- Typing Practice Tab -->
+        <div id="practice_content" class="tab-content active">
+            <div class="mb-4">
+                <label for="sample_text" id="question_label" class="block mb-1">題目：</label>
+                <div id="sample_text" contenteditable="false" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded overflow-y-auto whitespace-pre-wrap"></div>
+            </div>
+            <div class="mb-4">
+                <label for="input_text" id="input_label" class="block mb-1">請輸入：</label>
+                <textarea id="input_text" class="w-full p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded resize-none"></textarea>
+            </div>
+            <div class="mb-4">
+                <label for="word_count" id="word_count_label" class="block mb-1">輸入練習字數（隨機生成）：</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="word_count" placeholder="例如：50" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-36">
+                    <select id="language_select" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-28">
+                        <option value="chinese" selected>Chinese</option>
+                        <option value="english">English</option>
+                    </select>
+                    <button id="generate_button" onclick="generateQuestions()" class="p-2 bg-blue-600 text-white rounded hover:bg-blue-700">生成題目</button>
+                </div>
+            </div>
+            <div class="mb-4 flex gap-2">
+                <button id="start_button" onclick="startPractice()" class="p-2 bg-green-600 text-white rounded hover:bg-green-700">開始練習</button>
+                <button id="stop_button" onclick="stopPractice()" disabled class="p-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed">停止練習</button>
+            </div>
+            <div class="flex justify-between w-full mt-2">
+                <span id="status_label">打字速度：0 字/分鐘 | 準確率：0%</span>
+                <span id="cangjie_label">倉頡碼：點擊題目中的字來查詢</span>
             </div>
         </div>
-        <div class="mb-4 flex gap-2">
-            <input type="file" id="file_input" accept=".txt" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded">
-            <button id="upload_button" onclick="uploadFile()" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600">上傳題庫</button>
-            <button id="start_button" onclick="startPractice()" class="p-2 bg-green-600 text-white rounded hover:bg-green-700">開始練習</button>
-            <button id="stop_button" onclick="stopPractice()" disabled class="p-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-500 disabled:cursor-not-allowed">停止練習</button>
-        </div>
-        <div class="flex justify-between w-full mt-2">
-            <span id="status_label">打字速度：0 字/分鐘 | 準確率：0%</span>
-            <span id="cangjie_label">倉頡碼：點擊題目中的字來查詢</span>
+
+        <!-- Question Management Tab -->
+        <div id="management_content" class="tab-content">
+            <div class="mb-6">
+                <h2 class="text-xl mb-2">題目管理</h2>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="question_set_name" placeholder="題目集名稱（選填）" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-48">
+                    <input type="file" id="file_input" accept=".txt" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded">
+                    <button id="upload_button" onclick="uploadFile()" class="p-2 bg-gray-500 text-white rounded hover:bg-gray-600">上傳題目</button>
+                </div>
+                <div>
+                    <label for="question_set_select" class="block mb-1">選擇題目集：</label>
+                    <select id="question_set_select" class="p-2 bg-gray-800 text-gray-200 border border-gray-600 rounded w-full" onchange="loadSelectedQuestions()">
+                        <option value="">-- 選擇題目集 --</option>
+                    </select>
+                </div>
+                <div id="question_list" class="mt-2 max-h-40 overflow-y-auto">
+                    <!-- 題目集列表將動態生成 -->
+                </div>
+            </div>
         </div>
     </div>
 
@@ -71,12 +117,14 @@
             chinese: {
                 page_title: "打字練習程式",
                 main_title: "打字練習程式",
+                practice_tab: "打字練習",
+                management_tab: "題目管理",
                 question_label: "題目：",
                 input_label: "請輸入：",
-                word_count_label: "輸入練習字數：",
+                word_count_label: "輸入練習字數（隨機生成）：",
                 word_count_placeholder: "例如：50",
                 generate_button: "生成題目",
-                upload_button: "上傳題庫",
+                upload_button: "上傳題目",
                 start_button: "開始練習",
                 stop_button: "停止練習",
                 status_initial: "打字速度：0 字/分鐘 | 準確率：0%",
@@ -85,34 +133,67 @@
                 upload_message: "已上傳 {total_chars} 字題目，點擊「開始練習」開始",
                 stop_message: "練習已停止，最終打字速度：{speed} 字/分鐘",
                 complete_message: "練習完成！最終打字速度：{speed} 字/分鐘",
-                no_questions: "請先生成或上傳題目"
+                no_questions: "請先生成或上傳題目",
+                question_set_label: "選擇題目集：",
+                delete_confirm: "確定要刪除「{name}」嗎？",
+                delete_success: "題目「{name}」已刪除",
+                delete_error: "刪除失敗：{error}"
             },
             english: {
                 page_title: "Typing Practice",
                 main_title: "Typing Practice",
+                practice_tab: "Typing Practice",
+                management_tab: "Question Management",
                 question_label: "Question:",
                 input_label: "Please type here:",
-                word_count_label: "Number of characters to practice:",
+                word_count_label: "Number of characters to practice (random):",
                 word_count_placeholder: "e.g., 50",
                 generate_button: "Generate Questions",
                 upload_button: "Upload Questions",
                 start_button: "Start Practice",
                 stop_button: "Stop Practice",
                 status_initial: "Typing Speed: 0 wpm | Accuracy: 0%",
-                cangjie_initial: "Cangjie: Click a character in the question to check",
+                cangjie_initial: "Cangjie: Not applicable for English",
                 generate_message: "Generated {total_chars} characters, click \"Start Practice\" to begin",
                 upload_message: "Uploaded {total_chars} characters, click \"Start Practice\" to begin",
                 stop_message: "Practice stopped, final speed: {speed} wpm",
                 complete_message: "Practice completed! Final speed: {speed} wpm",
-                no_questions: "Please generate or upload questions first"
+                no_questions: "Please generate or upload questions first",
+                question_set_label: "Select Question Set:",
+                delete_confirm: "Are you sure you want to delete \"{name}\"?",
+                delete_success: "Question set \"{name}\" deleted",
+                delete_error: "Deletion failed: {error}"
             }
         };
+
+        // 切換標籤
+        function switchTab(tab) {
+            const practiceTab = document.getElementById('practice_tab');
+            const managementTab = document.getElementById('management_tab');
+            const practiceContent = document.getElementById('practice_content');
+            const managementContent = document.getElementById('management_content');
+
+            if (tab === 'practice') {
+                practiceTab.classList.add('active');
+                managementTab.classList.remove('active');
+                practiceContent.classList.add('active');
+                managementContent.classList.remove('active');
+            } else {
+                practiceTab.classList.remove('active');
+                managementTab.classList.add('active');
+                practiceContent.classList.remove('active');
+                managementContent.classList.add('active');
+                refreshQuestionList(); // 開啟題目管理時刷新列表
+            }
+        }
 
         // 更新界面語言
         function updateInterfaceLanguage(language) {
             const texts = languageText[language];
             document.getElementById('page_title').textContent = texts.page_title;
             document.getElementById('main_title').textContent = texts.main_title;
+            document.getElementById('practice_tab').textContent = texts.practice_tab;
+            document.getElementById('management_tab').textContent = texts.management_tab;
             document.getElementById('question_label').textContent = texts.question_label;
             document.getElementById('input_label').textContent = texts.input_label;
             document.getElementById('word_count_label').textContent = texts.word_count_label;
@@ -122,72 +203,65 @@
             document.getElementById('start_button').textContent = texts.start_button;
             document.getElementById('stop_button').textContent = texts.stop_button;
             document.getElementById('status_label').textContent = texts.status_initial;
+            document.getElementById('question_set_select').previousElementSibling.textContent = texts.question_set_label;
             updateCangjieLabel(language);
-        }
-
-        document.getElementById('sample_text').addEventListener('click', function(e) {
-            const selection = window.getSelection();
-            if (selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                const text = questions[currentQuestionIndex];
-                const cursorPos = range.startOffset;
-                if (cursorPos >= 0 && cursorPos < text.length) {
-                    const char = text[cursorPos];
-                    const language = document.getElementById('language_select').value;
-                    if (language === 'chinese') {
-                        fetch('/get_cangjie', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ char: char })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            document.getElementById('cangjie_label').textContent = 
-                                `${languageText[language].cangjie_initial.split(':')[0]}: ${data.char} - ${data.cangjie}`;
-                        })
-                        .catch(error => {
-                            document.getElementById('cangjie_label').textContent = 
-                                `${languageText[language].cangjie_initial.split(':')[0]}: 查詢失敗 (${error.message})`;
-                        });
-                    }
-                }
+            if (document.getElementById('management_content').classList.contains('active')) {
+                refreshQuestionList(); // 如果在題目管理標籤，更新列表
             }
-        });
-
-        document.getElementById('input_text').addEventListener('input', function() {
-            if (!startTime) return;
-            checkTyping(this.value);
-        });
-
-        function generateQuestions() {
-            const wordCount = document.getElementById('word_count').value;
-            const language = document.getElementById('language_select').value;
-            fetch('/generate_questions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ word_count: wordCount, language: language })
-            })
-            .then(response => response.json())
-            .then(data => {
-                questions = data.questions;
-                currentQuestionIndex = 0;
-                document.getElementById('sample_text').textContent = questions[0];
-                document.getElementById('status_label').textContent = 
-                    languageText[language].generate_message.replace('{total_chars}', data.total_chars);
-                updateCangjieLabel(language);
-            });
         }
 
+        // 載入題目列表
+        function refreshQuestionList() {
+            fetch('/list_questions')
+                .then(response => response.json())
+                .then(data => {
+                    const questionList = document.getElementById('question_list');
+                    const questionSelect = document.getElementById('question_set_select');
+                    const language = document.getElementById('language_select').value;
+                    
+                    // 更新選擇框
+                    questionSelect.innerHTML = `<option value="">-- ${languageText[language].question_set_label.replace('：', '')} --</option>`;
+                    data.questions.forEach(q => {
+                        const option = document.createElement('option');
+                        option.value = q.id;
+                        option.textContent = `${q.name} (${q.total_chars} ${language === 'chinese' ? '字' : 'chars'})`;
+                        questionSelect.appendChild(option);
+                    });
+                    
+                    // 更新題目列表
+                    questionList.innerHTML = '';
+                    data.questions.forEach(q => {
+                        const div = document.createElement('div');
+                        div.className = 'flex justify-between items-center p-2 bg-gray-700 rounded mb-1';
+                        div.innerHTML = `
+                            <span>${q.name} (${q.total_chars} ${language === 'chinese' ? '字' : 'chars'}, 上傳於 ${new Date(q.uploaded_at).toLocaleString()})</span>
+                            <button onclick="deleteQuestionSet('${q.id}', '${q.name.replace(/'/g, "\\'")}')" class="p-1 bg-red-600 text-white rounded hover:bg-red-700">刪除</button>
+                        `;
+                        questionList.appendChild(div);
+                    });
+                })
+                .catch(error => {
+                    console.error('載入題目列表失敗:', error);
+                });
+        }
+
+        // 上傳檔案
         function uploadFile() {
             const fileInput = document.getElementById('file_input');
+            const nameInput = document.getElementById('question_set_name');
             const file = fileInput.files[0];
+            const language = document.getElementById('language_select').value;
+            
             if (!file) {
-                alert(languageText[document.getElementById('language_select').value].no_questions);
+                alert(languageText[language].no_questions);
                 return;
             }
 
             const formData = new FormData();
             formData.append('file', file);
+            if (nameInput.value.trim()) {
+                formData.append('name', nameInput.value.trim());
+            }
 
             fetch('/upload_file', {
                 method: 'POST',
@@ -202,14 +276,140 @@
             .then(data => {
                 questions = data.questions;
                 currentQuestionIndex = 0;
-                document.getElementById('sample_text').textContent = questions[0];
+                document.getElementById('sample_text').textContent = questions[0] || '';
                 document.getElementById('status_label').textContent = 
-                    languageText[document.getElementById('language_select').value].upload_message.replace('{total_chars}', data.total_chars);
-                const language = document.getElementById('language_select').value;
+                    languageText[language].upload_message.replace('{total_chars}', data.total_chars);
                 updateCangjieLabel(language);
+                refreshQuestionList();
+                nameInput.value = '';
+                fileInput.value = '';
+                document.getElementById('question_set_select').value = data.id; // 選擇剛上傳的題目集
+                switchTab('practice'); // 切換到練習標籤
             })
             .catch(error => {
                 alert(`Upload failed: ${error.message}`);
+            });
+        }
+
+        // 載入選定的題目集
+        function loadSelectedQuestions() {
+            const questionId = document.getElementById('question_set_select').value;
+            const language = document.getElementById('language_select').value;
+            if (!questionId) {
+                questions = [];
+                document.getElementById('sample_text').textContent = '';
+                document.getElementById('status_label').textContent = languageText[language].no_questions;
+                updateCangjieLabel(language);
+                return;
+            }
+
+            fetch(`/load_questions/${questionId}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    questions = data.questions;
+                    currentQuestionIndex = 0;
+                    document.getElementById('sample_text').textContent = questions[0] || '';
+                    document.getElementById('status_label').textContent = 
+                        languageText[language].upload_message.replace('{total_chars}', data.total_chars);
+                    updateCangjieLabel(language);
+                    switchTab('practice'); // 切換到練習標籤
+                })
+                .catch(error => {
+                    alert(`Load failed: ${error.message}`);
+                });
+        }
+
+        // 刪除題目集
+        function deleteQuestionSet(id, name) {
+            const language = document.getElementById('language_select').value;
+            if (!confirm(languageText[language].delete_confirm.replace('{name}', name))) {
+                return;
+            }
+
+            fetch(`/delete_questions/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(languageText[language].delete_success.replace('{name}', name));
+                refreshQuestionList();
+                if (questions.length && document.getElementById('question_set_select').value === id) {
+                    questions = [];
+                    document.getElementById('sample_text').textContent = '';
+                    document.getElementById('status_label').textContent = languageText[language].no_questions;
+                    updateCangjieLabel(language);
+                }
+            })
+            .catch(error => {
+                alert(languageText[language].delete_error.replace('{error}', error.message));
+            });
+        }
+
+        // 以下為原始 JavaScript 程式碼，僅更新必要部分
+        document.getElementById('sample_text').addEventListener('click', function(e) {
+            const selection = window.getSelection();
+            const language = document.getElementById('language_select').value;
+            if (language !== 'chinese') return;
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const text = questions[currentQuestionIndex];
+                const cursorPos = range.startOffset;
+                if (cursorPos >= 0 && cursorPos < text.length) {
+                    const char = text[cursorPos];
+                    fetch('/get_cangjie', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ char: char })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('cangjie_label').textContent = 
+                            `${languageText[language].cangjie_initial.split(':')[0]}: ${data.char} - ${data.cangjie}`;
+                    })
+                    .catch(error => {
+                        document.getElementById('cangjie_label').textContent = 
+                            `${languageText[language].cangjie_initial.split(':')[0]}: 查詢失敗 (${error.message})`;
+                    });
+                }
+            }
+        });
+
+        document.getElementById('input_text').addEventListener('input', function() {
+            if (!startTime) return;
+            checkTyping(this.value);
+        });
+
+        function generateQuestions() {
+            const wordCount = document.getElementById('word_count').value;
+            const language = document.getElementById('language_select').value;
+            if (!/^\d+$/.test(wordCount) || parseInt(wordCount) <= 0) {
+                alert(languageText[language].word_count_error || '請輸入正數');
+                return;
+            }
+            fetch('/generate_questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word_count: wordCount, language: language })
+            })
+            .then(response => response.json())
+            .then(data => {
+                questions = data.questions;
+                currentQuestionIndex = 0;
+                document.getElementById('sample_text').textContent = questions[0];
+                document.getElementById('status_label').textContent = 
+                    languageText[language].generate_message.replace('{total_chars}', data.total_chars);
+                updateCangjieLabel(language);
+                document.getElementById('question_set_select').value = ''; // 清空選擇
             });
         }
 
@@ -353,8 +553,8 @@
                 const speed = Math.round((typedText.length / elapsedTime) * 60);
                 const correctChars = typedText.split('').reduce((acc, char, i) => 
                     acc + (char === currentQuestion[i] ? 1 : 0), 0);
-                const accuracy = currentQuestion.length > 0 ? 
-                    (correctChars / currentQuestion.length) * 100 : 0;
+                const accuracy = typedText.length > 0 ? 
+                    (correctChars / typedText.length) * 100 : 0;
                 const language = document.getElementById('language_select').value;
                 document.getElementById('status_label').textContent = 
                     language === 'chinese' 
@@ -371,12 +571,11 @@
             }
         }
 
-        // 初始設置語言為中文
+        // 初始設置語言為中文並載入題目列表
         document.getElementById('language_select').addEventListener('change', function() {
             updateInterfaceLanguage(this.value);
         });
 
-        // 頁面載入時設置中文並檢查字體
         updateInterfaceLanguage('chinese');
 
         window.onload = function() {
@@ -386,9 +585,6 @@
             const inputFontSize = window.getComputedStyle(inputText).fontSize;
             console.log(`#sample_text 實際字體大小: ${sampleFontSize}`);
             console.log(`#input_text 實際字體大小: ${inputFontSize}`);
-            if (sampleFontSize !== '32px' || inputFontSize !== '32px') {
-                alert('字體大小未正確設為 32px，請檢查控制台訊息');
-            }
         };
     </script>
 </body>

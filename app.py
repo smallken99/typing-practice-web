@@ -2,6 +2,9 @@ from flask import Flask, render_template, request, jsonify
 import random
 import time
 import os
+import json
+import uuid
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -56,6 +59,33 @@ try:
 except FileNotFoundError:
     print("找不到 dime_cangjie.txt")
 
+# 設定上傳資料夾和題目元資料檔案
+UPLOAD_FOLDER = 'uploads'
+QUESTION_METADATA_FILE = 'questions.json'
+
+# 確保上傳資料夾存在
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def load_question_metadata():
+    """載入題目元資料"""
+    try:
+        if os.path.exists(QUESTION_METADATA_FILE):
+            with open(QUESTION_METADATA_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"載入元資料失敗: {e}")
+        return {}
+
+def save_question_metadata(metadata):
+    """儲存題目元資料"""
+    try:
+        with open(QUESTION_METADATA_FILE, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"儲存元資料失敗: {e}")
+
 def convert_to_cangjie_roots(code):
     return ''.join(CANGJIE_ROOTS.get(c.lower(), c) for c in code)
 
@@ -66,7 +96,13 @@ def index():
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions():
     data = request.json
-    word_count = int(data.get('word_count', 50))
+    try:
+        word_count = int(data.get('word_count', 50))
+        if word_count <= 0:
+            return jsonify({'error': '字數必須為正數'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'error': '字數必須為有效數字'}), 400
+
     language = data.get('language', 'chinese')
 
     if language == 'english':
@@ -121,11 +157,86 @@ def upload_file():
                 else:
                     questions.append(line)
             total_chars = sum(len(q) for q in questions)
-            return jsonify({'questions': questions, 'total_chars': total_chars})
+            
+            # 生成唯一檔案名稱
+            unique_id = str(uuid.uuid4())
+            filename = f"{unique_id}.txt"
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            
+            # 儲存檔案
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # 更新元資料
+            metadata = load_question_metadata()
+            display_name = request.form.get('name', file.filename)  # 使用者可指定名稱，預設為檔案名稱
+            metadata[unique_id] = {
+                'name': display_name,
+                'filepath': filepath,
+                'total_chars': total_chars,
+                'uploaded_at': datetime.now().isoformat()
+            }
+            save_question_metadata(metadata)
+            
+            return jsonify({'questions': questions, 'total_chars': total_chars, 'id': unique_id})
+        except UnicodeDecodeError:
+            return jsonify({'error': '檔案必須為 UTF-8 編碼'}), 400
         except Exception as e:
             return jsonify({'error': f'檔案處理失敗：{str(e)}'}), 500
     else:
         return jsonify({'error': '僅支援 .txt 檔案'}), 400
+
+@app.route('/list_questions', methods=['GET'])
+def list_questions():
+    metadata = load_question_metadata()
+    question_list = [
+        {
+            'id': key,
+            'name': value['name'],
+            'total_chars': value['total_chars'],
+            'uploaded_at': value['uploaded_at']
+        }
+        for key, value in metadata.items()
+    ]
+    return jsonify({'questions': question_list})
+
+@app.route('/load_questions/<question_id>', methods=['GET'])
+def load_questions(question_id):
+    metadata = load_question_metadata()
+    if question_id not in metadata:
+        return jsonify({'error': '題目不存在'}), 404
+    
+    try:
+        with open(metadata[question_id]['filepath'], 'r', encoding='utf-8') as f:
+            content = f.read()
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        questions = []
+        for line in lines:
+            if len(line) > 20:
+                for i in range(0, len(line), 20):
+                    questions.append(line[i:i+20])
+            else:
+                questions.append(line)
+        total_chars = sum(len(q) for q in questions)
+        return jsonify({'questions': questions, 'total_chars': total_chars, 'id': question_id})
+    except Exception as e:
+        return jsonify({'error': f'載入題目失敗：{str(e)}'}), 500
+
+@app.route('/delete_questions/<question_id>', methods=['DELETE'])
+def delete_questions(question_id):
+    metadata = load_question_metadata()
+    if question_id not in metadata:
+        return jsonify({'error': '題目不存在'}), 404
+    
+    try:
+        # 刪除檔案
+        os.remove(metadata[question_id]['filepath'])
+        # 更新元資料
+        del metadata[question_id]
+        save_question_metadata(metadata)
+        return jsonify({'message': '題目已刪除'})
+    except Exception as e:
+        return jsonify({'error': f'刪除失敗：{str(e)}'}), 500
 
 @app.route('/get_cangjie', methods=['POST'])
 def get_cangjie():
@@ -138,5 +249,5 @@ def get_cangjie():
     return jsonify({'char': char, 'cangjie': cangjie_code})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Render 提供 PORT 環境變數
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
