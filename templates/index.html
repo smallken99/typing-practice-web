@@ -125,8 +125,8 @@
                 word_count_placeholder: "例如：50",
                 generate_button: "生成題目",
                 upload_button: "上傳題目",
-                start_button: "開始練習",
-                stop_button: "停止練習",
+                start_button: "開始練習(Ctrl+A)",
+                stop_button: "停止練習(Ctrl+S)",
                 status_initial: "打字速度：0 字/分鐘 | 準確率：0%",
                 cangjie_initial: "倉頡碼：點擊題目中的字來查詢",
                 generate_message: "已生成 {total_chars} 字題目，點擊「開始練習」開始",
@@ -575,6 +575,24 @@
         document.getElementById('language_select').addEventListener('change', function() {
             updateInterfaceLanguage(this.value);
         });
+
+        
+        // Add keyboard shortcut Ctrl + A to trigger startPractice()
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'a') {
+                event.preventDefault(); // Prevent default Ctrl+A behavior (e.g., selecting all text)
+                startPractice();
+            }
+        });
+
+        // Add keyboard shortcut Ctrl + A to trigger stopPractice()
+                document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 's') {
+                event.preventDefault(); // Prevent default Ctrl+S behavior (e.g., selecting all text)
+                stopPractice();
+            }
+        });
+
 
         updateInterfaceLanguage('chinese');
 
