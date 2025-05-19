@@ -7,3 +7,5 @@ uploads/
 # 其他常見忽略規則（可選）
 *.pyc
 __pycache__/
+venv/
+.venv/
