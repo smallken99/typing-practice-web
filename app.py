@@ -94,10 +94,7 @@ def convert_to_cangjie_roots(code):
 def index():
     return render_template('index.html')
 
-@app.route('/camera')
-def camera():
-    return render_template('camera.html')
-
+ 
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions():
     data = request.json
