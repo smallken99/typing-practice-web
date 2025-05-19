@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>員工報到系統 (雲端版)</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    .pagination-button {
+      padding: 0.5rem 0.75rem;
+      margin: 0 0.25rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .pagination-button:hover:not(:disabled) {
+      background-color: #edf2f7;
+    }
+    .pagination-button.active {
+      background-color: #4299e1;
+      color: white;
+      border-color: #4299e1;
+    }
+    .pagination-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      font-size: 1.2rem;
+      color: #333;
+    }
+    .floating-message {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(255, 255, 255, 0.9);
+        border: 2px solid #4299e1;
+        padding: 20px;
+        border-radius: 10px;
+        font-size: 50px; /* 字體大小 */
+        color: #4299e1;
+        z-index: 1000; /* 確保在最上層 */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="root" class="container mx-auto p-4"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback ,useLayoutEffect } = React;
+
+    // --- 設定 ---
+    const ID_COLUMN_NAME_FRONTEND = '會員編號';
+    const NAME_COLUMN_NAME_FRONTEND = '姓名';
+    const ITEMS_PER_PAGE = 20;
+    // !!! 將下面這行替換成你的 Google Apps Script Web App URL !!!
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyGw_kM83ml9xJz582Vuoot9okFn7uXplhoM8zp_qk81mzBG09deMxxYUckAqg0jiwyhw/exec'; 
+    // ---
+
+    console.log("SCRIPT: GOOGLE_SCRIPT_URL is set to:", GOOGLE_SCRIPT_URL);
+
+    const App = () => {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      console.log(isMobile ? "使用者是手機" : "使用者是電腦");
+      console.log("APP: Component rendering/re-rendering");
+      const [attendees, setAttendees] = useState([]);
+      const [message, setMessage] = useState('');
+      const [checkInCount, setCheckInCount] = useState(0);
+      const [isLoading, setIsLoading] = useState(true);
+      const videoRef = useRef(null);
+      const canvasRef = useRef(document.createElement('canvas'));
+      const fileInputRef = useRef(null);
+      const manualIdInputRef = useRef(null);
+
+      const [currentPage, setCurrentPage] = useState(1);
+      const [searchTerm, setSearchTerm] = useState('');
+
+      const [floatingMessage, setFloatingMessage] = useState('');
+
+      const filteredAttendees = attendees.filter(attendee => 
+        (attendee.id && String(attendee.id).toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (attendee.name && String(attendee.name).toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      const paginatedAttendees = filteredAttendees.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+      );
+      const totalPages = Math.ceil(filteredAttendees.length / ITEMS_PER_PAGE);
+
+      const callGoogleScript = async (method, action, payload = null) => {
+        console.log(`API_CALL: Initiating. Method: ${method}, Action: ${action}, Payload:`, payload);
+        setIsLoading(true); // Set loading true at the beginning of any API call
+        try {
+          let url = `${GOOGLE_SCRIPT_URL}?action=${action}`;
+          const options = { method: method, redirect: 'follow' };
+          if (method === 'POST') {
+            options.body = JSON.stringify({ action, ...payload });
+            options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+          } else if (method === 'GET' && payload) {
+             Object.keys(payload).forEach(key => {
+                if (payload[key] !== undefined) {
+                    url += `&${encodeURIComponent(key)}=${encodeURIComponent(payload[key])}`;
+                }
+             });
+          }
+          console.log(`API_CALL: Fetching URL: ${url}`);
+          const response = await fetch(url, options);
+          console.log(`API_CALL: Response status: ${response.status} for action ${action}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`API_CALL_ERROR: HTTP Error ${response.status}. Response:`, errorText);
+            throw new Error(`API請求失敗 (HTTP ${response.status})`);
+          }
+          const result = await response.json();
+          console.log(`API_CALL_SUCCESS: Response JSON for action ${action}:`, result);
+          if (!result.success) {
+            console.error(`API_CALL_LOGIC_ERROR: API returned success:false. Message: ${result.message}`);
+            throw new Error(result.message || "API 操作回傳失敗狀態");
+          }
+          return result;
+        } catch (error) {
+          console.error(`API_CALL_EXCEPTION: Error (Action: ${action}):`, error);
+          setMessage(`錯誤：${error.message}`);
+          throw error; 
+        }
+        // setIsLoading(false) will be handled by the calling function's finally block
+      };
+      
+      const updateCheckInCount = useCallback((currentAttendeesList) => {
+        const count = currentAttendeesList.filter(a => a.checkedIn).length;
+        console.log("UPDATE_COUNT: To:", count, "from list length:", currentAttendeesList.length);
+        setCheckInCount(count);
+      }, []);
+
+      const fetchAttendees = useCallback(async () => {
+        console.log("FETCH_ATTENDEES: Starting...");
+        // setIsLoading(true); // isLoading is now set by callGoogleScript or the caller of fetchAttendees
+        try {
+          const result = await callGoogleScript('GET', 'getAttendees');
+          const fetchedList = result.attendees || [];
+          setAttendees(fetchedList);
+          updateCheckInCount(fetchedList);
+          setMessage(fetchedList.length > 0 ? '名單已從雲端載入' : '雲端名單為空或載入失敗');
+          console.log("FETCH_ATTENDEES: Success. New length:", fetchedList.length);
+        } catch (error) {
+          console.error("FETCH_ATTENDEES: Error:", error.message);
+          setMessage(`載入名單失敗: ${error.message}`);
+          setAttendees([]);
+          updateCheckInCount([]);
+        } finally {
+          
+            setIsLoading(false); // Ensure isLoading is false after fetch operation
+            console.log("FETCH_ATTENDEES: Finished. isLoading:", false);
+        }
+      }, [updateCheckInCount]); // Removed callGoogleScript from deps, it's stable
+
+      useEffect(() => {
+        console.log("INITIAL_EFFECT: Running...");
+        if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL') {
+            setMessage('錯誤：請在程式碼中設定 Google Apps Script Web App URL！');
+            setIsLoading(false);
+            console.warn("INITIAL_EFFECT: GOOGLE_SCRIPT_URL not set. Aborting fetch.");
+            return;
+        }
+        console.log("INITIAL_EFFECT: Calling fetchAttendees.");
+        setIsLoading(true); // Set loading before calling fetchAttendees
+        fetchAttendees();
+      }, [fetchAttendees]); // fetchAttendees is memoized
+
+      useLayoutEffect(() => {
+        setTimeout(() => {
+          if (manualIdInputRef.current) {
+            manualIdInputRef.current.focus();
+          }
+        }, 100); // 延遲 100ms
+      }, []);
+
+      // ... (handleFileUpload, updateAttendeeCheckInStatusOnFrontend - unchanged from debug version)
+       const handleFileUpload = async (event) => {
+        console.log("FILE_UPLOAD: File selected.");
+        const key = prompt('請輸入密鑰以確認上傳名單：');
+        if (key !== 'ken') {
+            alert('密鑰錯誤，無法上傳名單。');
+            return; // 如果密鑰不正確，則不執行上傳操作
+        }
+
+        const file = event.target.files[0];
+        if (!file) { console.log("FILE_UPLOAD: No file selected."); return; }
+        
+        // setIsLoading(true); // isLoading is now set by callGoogleScript
+        console.log("FILE_UPLOAD: Started processing file:", file.name);
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            let parsedDataSource = [];
+            if (file.name.endsWith('.csv')) { /* ... CSV parsing ... */ 
+                const result = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+                if (result.errors.length > 0) throw new Error(`CSV 解析錯誤: ${result.errors[0].message}`);
+                parsedDataSource = result.data;
+            } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {  /* ... XLSX parsing ... */
+                const workbook = XLSX.read(e.target.result, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                parsedDataSource = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+            } else { throw new Error('不支援的檔案格式'); }
+            console.log("FILE_UPLOAD: Parsed data source length:", parsedDataSource.length);
+
+            if (!parsedDataSource || parsedDataSource.length === 0) throw new Error('檔案中無有效資料。');
+            if (!parsedDataSource[0] || !parsedDataSource[0].hasOwnProperty(ID_COLUMN_NAME_FRONTEND) || !parsedDataSource[0].hasOwnProperty(NAME_COLUMN_NAME_FRONTEND)) {
+                const availableColumns = parsedDataSource[0] ? Object.keys(parsedDataSource[0]).join(', ') : '無可用欄位';
+                throw new Error(`必要的欄位 "${ID_COLUMN_NAME_FRONTEND}" 或 "${NAME_COLUMN_NAME_FRONTEND}" 未找到。\n可用欄位: ${availableColumns}`);
+            }
+            const attendeesToImport = parsedDataSource.map((row) => ({
+                id: String(row[ID_COLUMN_NAME_FRONTEND] || '').trim(), name: String(row[NAME_COLUMN_NAME_FRONTEND] || '').trim(),
+            })).filter(row => row.id && row.name);
+            console.log("FILE_UPLOAD: Attendees to import length:", attendeesToImport.length);
+
+            if (attendeesToImport.length === 0) throw new Error('處理後無有效參與者資料。');
+
+            const result = await callGoogleScript('POST', 'importAttendees', { attendees: attendeesToImport });
+            setMessage(result.message || `成功匯入 ${attendeesToImport.length} 筆資料`);
+            console.log("FILE_UPLOAD: Import successful, fetching updated list...");
+            await fetchAttendees(); 
+            setCurrentPage(1); setSearchTerm('');
+          } catch (error) {
+            console.error("FILE_UPLOAD: Error:", error);
+            setMessage(`匯入失敗：${error.message}`);
+          } finally {
+            // setIsLoading(false); // isLoading is now set by fetchAttendees's finally
+            console.log("FILE_UPLOAD: Process finished.");
+            if(fileInputRef.current) fileInputRef.current.value = "";
+          }
+        };
+        reader.onerror = () => { console.error("FILE_UPLOAD: FileReader error."); setMessage('讀取檔案失敗'); setIsLoading(false); };
+        if (file.name.endsWith('.csv')) reader.readAsText(file);
+        else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) reader.readAsArrayBuffer(file);
+        else { setMessage('不支援的檔案格式'); setIsLoading(false); if(fileInputRef.current) fileInputRef.current.value = "";}
+      };
+      
+      const updateAttendeeCheckInStatusOnFrontend = (id, newStatus, name) => {
+          console.log(`UPDATE_FRONTEND: ID ${id} to checkedIn: ${newStatus}`);
+          setAttendees(prev => {
+              const updated = prev.map(a => String(a.id).trim() === String(id).trim() ? { ...a, checkedIn: newStatus } : a);
+              updateCheckInCount(updated);
+              return updated;
+          });
+          const message = newStatus ? `報到成功!：${name} (${id})` : `重覆報到!：${name} (${id})`;
+          document.getElementById("manualId").focus();
+          setFloatingMessage(message); // 設定浮動訊息
+          setTimeout(() => setFloatingMessage(''), 3000); // 3秒後隱藏訊息
+
+          if(!isMobile){
+            setTimeout(() => {
+              if (manualIdInputRef.current) {
+                manualIdInputRef.current.focus();
+              }
+            }, 100); // 延遲 100ms
+          }
+      };
+
+
+      const handleCheckIn = async (rawId) => {
+        const id = String(rawId).trim();
+        console.log(`CHECK_IN: Attempting for ID: "${id}"`);
+        const attendee = attendees.find(a => String(a.id).trim() === id);
+        if (!attendee) {
+            console.warn(`CHECK_IN: ID "${id}" not found in frontend.`);
+            setMessage(`無此${ID_COLUMN_NAME_FRONTEND}: ${id}`);
+            return;
+        }
+        if (attendee.checkedIn) { 
+            console.log(`CHECK_IN: ID "${id}" already checked in.`);
+            setFloatingMessage(`${attendee.name} (${id}) 重覆報到`); // 使用浮動訊息顯示已報到的訊息
+            setTimeout(() => setFloatingMessage(''), 3000); // 3秒後隱藏訊息
+            if(!isMobile){
+            setTimeout(() => {
+              if (manualIdInputRef.current) {
+                manualIdInputRef.current.focus();
+              }
+            }, 100); // 延遲 100ms
+            }
+            return;
+        }
+        // setIsLoading(true); // isLoading is now set by callGoogleScript
+        try {
+          await callGoogleScript('POST', 'updateCheckInStatus', { id: id, checkedIn: true });
+          updateAttendeeCheckInStatusOnFrontend(id, true, attendee.name);
+        } catch (error) { console.error(`CHECK_IN: Error for ID "${id}":`, error); }
+        finally { setIsLoading(false); console.log(`CHECK_IN: Process for ID "${id}" finished.`); }
+      };
+
+      const handleUndoCheckIn = async (rawId) => {
+        const id = String(rawId).trim();
+        console.log(`UNDO_CHECK_IN: Attempting for ID: "${id}"`);
+        const attendee = attendees.find(a => String(a.id).trim() === id);
+        if (!attendee) { /* ... */ setMessage(`無此${ID_COLUMN_NAME_FRONTEND}: ${id}`); return; }
+        if (!attendee.checkedIn) { /* ... */ setMessage(`${attendee.name} (${id}) 本來就未報到`); return; }
+        // setIsLoading(true); // isLoading is now set by callGoogleScript
+        try {
+          await callGoogleScript('POST', 'updateCheckInStatus', { id: id, checkedIn: false });
+          updateAttendeeCheckInStatusOnFrontend(id, false, attendee.name);
+        } catch (error) { console.error(`UNDO_CHECK_IN: Error for ID "${id}":`, error); }
+        finally { setIsLoading(false); console.log(`UNDO_CHECK_IN: Process for ID "${id}" finished.`); }
+      };
+
+      // ... (handleManualCheckIn, handleResetData, handleExportData - mostly unchanged, ensure setIsLoading(false) in finally if they call API directly)
+      const handleManualCheckIn = (e) => { /* ... as before ... */ 
+          e.preventDefault(); const idInput = manualIdInputRef.current; const id = idInput.value.trim();
+          console.log("MANUAL_CHECK_IN: Submitted ID:", id); if (id) { handleCheckIn(id); idInput.value = ''; } 
+          else { setMessage('請輸入會員編號'); } idInput.focus();
+      };
+      const handleResetData = async () => {
+          console.log("RESET_DATA: Initiated.");
+          const key = prompt('請輸入密鑰以確認重置所有雲端資料：');
+          if (key !== 'ken') {
+              alert('密鑰錯誤，無法重置資料。');
+              return; // 如果密鑰不正確，則不執行重置操作
+          }
+          if (window.confirm('確定要重置所有雲端資料嗎？')) {
+              // setIsLoading(true); // isLoading is now set by callGoogleScript
+              try {
+                  const result = await callGoogleScript('POST', 'resetData');
+                  setMessage(result.message || '雲端資料已重置');
+                  setAttendees([]); updateCheckInCount([]); setCurrentPage(1); setSearchTerm('');
+                  console.log("RESET_DATA: Frontend state cleared.");
+              } catch (error) { console.error("RESET_DATA: Error:", error); }
+              finally { setIsLoading(false); console.log("RESET_DATA: Process finished."); }
+          } else { console.log("RESET_DATA: User cancelled."); }
+      };
+      const handleExportData = () => { /* ... as before ... */ 
+          console.log("EXPORT_DATA: Initiated. Attendees length:", attendees.length);
+          if (attendees.length === 0) { setMessage('沒有資料可供匯出'); return; }
+          const dataToExport = attendees.map(a => ({ [ID_COLUMN_NAME_FRONTEND]: a.id, [NAME_COLUMN_NAME_FRONTEND]: a.name, '報到狀態': a.checkedIn ? '已報到' : '未報到', }));
+          const csv = Papa.unparse(dataToExport); const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a'); const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url); link.setAttribute('download', `前端報到快照_${new Date().toISOString().slice(0,10)}.csv`);
+          document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+          setMessage('前端名單快照已匯出'); console.log("EXPORT_DATA: Complete.");
+      };
+
+
+      useEffect(() => { // Camera setup
+        let localStream = null;
+        let animationFrameId = null;
+        let isEffectMounted = true;
+        console.log("CAMERA_EFFECT: Running. isLoading:", isLoading);
+
+        const scanQRCodeTickInternal = () => {
+            if (!isEffectMounted) return;
+            scanQRCode();
+            animationFrameId = requestAnimationFrame(scanQRCodeTickInternal);
+        };
+
+        const stopStreamTracks = (stream) => {
+            if (stream && typeof stream.getTracks === 'function') {
+                console.log("CAMERA_EFFECT: stopStreamTracks - Stopping tracks.");
+                stream.getTracks().forEach(track => track.stop());
+            }
+        };
+
+        if (isLoading) {
+            console.log("CAMERA_EFFECT: isLoading is true. Stopping camera activity.");
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (videoRef.current && videoRef.current.srcObject) {
+                stopStreamTracks(videoRef.current.srcObject);
+                videoRef.current.srcObject = null; // Explicitly clear srcObject
+            }
+            return; 
+        }
+
+        // --- isLoading is false ---
+        console.log("CAMERA_EFFECT: isLoading is false. Setting up camera.");
+
+        const setupCamera = async () => {
+            if (!isEffectMounted || !videoRef.current) {
+                console.log("CAMERA_EFFECT: setupCamera - Aborted, effect unmounted or videoRef missing.");
+                return;
+            }
+
+            try {
+                let currentVideoSrcObject = videoRef.current.srcObject;
+                if (currentVideoSrcObject && currentVideoSrcObject.active && currentVideoSrcObject.getTracks().some(t => t.readyState === 'live')) {
+                    console.log("CAMERA_EFFECT: setupCamera - Existing stream is active.");
+                    if (videoRef.current.paused) {
+                        console.log("CAMERA_EFFECT: setupCamera - Video was paused, playing.");
+                        await videoRef.current.play();
+                    }
+                } else {
+                    console.log("CAMERA_EFFECT: setupCamera - No active stream or tracks ended. Getting new stream.");
+                    if (currentVideoSrcObject) { // Stop old/ended stream before getting a new one
+                        stopStreamTracks(currentVideoSrcObject);
+                    }
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    if (!isEffectMounted) { // Check after await
+                        console.log("CAMERA_EFFECT: setupCamera - Effect unmounted while getting stream, stopping new stream.");
+                        stopStreamTracks(stream);
+                        return;
+                    }
+                    localStream = stream; // Store for cleanup by this instance
+                    videoRef.current.srcObject = stream;
+                    await videoRef.current.play();
+                    console.log("CAMERA_EFFECT: setupCamera - New stream acquired and playing.");
+                }
+
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = requestAnimationFrame(scanQRCodeTickInternal);
+                console.log("CAMERA_EFFECT: setupCamera - Scan tick (re)started.");
+
+            } catch (err) {
+                if (!isEffectMounted) return;
+                console.error("CAMERA_EFFECT: setupCamera - Error:", err);
+                setMessage(err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' ? '攝影機權限被拒絕。' : `無法啟動攝影機: ${err.name}`);
+                if (localStream) stopStreamTracks(localStream); // Clean up if new stream was partially set up
+                else if (videoRef.current && videoRef.current.srcObject) stopStreamTracks(videoRef.current.srcObject); // Try to clean videoRef
+                if (videoRef.current) videoRef.current.srcObject = null; // Ensure srcObject is cleared on error
+            }
+        };
+
+        setupCamera();
+
+        return () => {
+            isEffectMounted = false;
+            console.log("CAMERA_EFFECT: Cleanup running.");
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (localStream) { // Only stop the stream this instance of the effect created
+                console.log("CAMERA_EFFECT: Cleanup - Stopping localStream tracks.");
+                stopStreamTracks(localStream);
+                if (videoRef.current && videoRef.current.srcObject === localStream) {
+                     videoRef.current.srcObject = null;
+                }
+            } else {
+                 console.log("CAMERA_EFFECT: Cleanup - localStream is null. Current videoRef.srcObject might be from another instance or already cleared.");
+                 // If isLoading became true, the main body of the effect would have already stopped and cleared videoRef.current.srcObject
+            }
+        };
+      }, [isLoading]); // Dependency on isLoading
+
+      const lastScannedId = useRef(null); 
+      const lastScannedTime = useRef(0);
+
+      const scanQRCode = () => { // Unchanged from debug version
+        if (isLoading || attendees.length === 0) return;
+        const video = videoRef.current; const canvas = canvasRef.current;
+        if (!video || video.paused || video.ended || !video.videoHeight || video.readyState < video.HAVE_ENOUGH_DATA) return;
+        try {
+            const ctx = canvas.getContext('2d'); canvas.height = video.videoHeight; canvas.width = video.videoWidth;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+            if (code && code.data) {
+                if (code.data !== lastScannedId.current || Date.now() - lastScannedTime.current > 2000) { 
+                    console.log("SCAN_QR: New valid QR, processing:", code.data);
+                    handleCheckIn(code.data); lastScannedId.current = code.data; lastScannedTime.current = Date.now();
+                }
+            }
+        } catch (error) { console.error("SCAN_QR: Error:", error); }
+      };
+      
+      const renderPaginationControls = () => { /* ... as before ... */ 
+        if (totalPages <= 1) return null; const pageNumbers = []; const maxPageButtons = 7; 
+        let startPage, endPage;
+        if (totalPages <= maxPageButtons) { startPage = 1; endPage = totalPages; } 
+        else {
+            const maxPagesBeforeCurrentPage = Math.floor((maxPageButtons - 3) / 2); const maxPagesAfterCurrentPage = Math.ceil((maxPageButtons - 3) / 2);
+            if (currentPage <= maxPagesBeforeCurrentPage + 1) { startPage = 1; endPage = maxPageButtons - 2; } 
+            else if (currentPage + maxPagesAfterCurrentPage >= totalPages) { startPage = totalPages - (maxPageButtons - 3); endPage = totalPages; } 
+            else { startPage = currentPage - maxPagesBeforeCurrentPage; endPage = currentPage + maxPagesAfterCurrentPage; }
+        }
+        pageNumbers.push(<button key={1} onClick={() => setCurrentPage(1)} className={`pagination-button ${1 === currentPage ? 'active' : ''}`} disabled={1 === currentPage || isLoading}>1</button>);
+        if (startPage > 2) { pageNumbers.push(<span key="ellipsis-start" className="mx-1">...</span>); }
+        for (let i = Math.max(2, startPage); i <= Math.min(totalPages -1, endPage) ; i++) { pageNumbers.push(<button key={i} onClick={() => setCurrentPage(i)} className={`pagination-button ${i === currentPage ? 'active' : ''}`} disabled={isLoading}>{i}</button>); }
+        if (endPage < totalPages - 1) { pageNumbers.push(<span key="ellipsis-end" className="mx-1">...</span>); }
+        if (totalPages > 1 && (endPage < totalPages || !pageNumbers.find(p => p.key == totalPages))) { pageNumbers.push(<button key={totalPages} onClick={() => setCurrentPage(totalPages)} className={`pagination-button ${totalPages === currentPage ? 'active' : ''}`} disabled={totalPages === currentPage || isLoading}>{totalPages}</button>); }
+        return (
+            <div className="mt-4 flex justify-center items-center">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || isLoading} className="pagination-button">上一頁</button>
+                {pageNumbers}
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || isLoading} className="pagination-button">下一頁</button>
+            </div>
+        );
+      };
+
+      // --- JSX 渲染 (unchanged structure) ---
+      return (
+        <div className="max-w-4xl mx-auto space-y-6">
+          {isLoading && <div className="loading-overlay">處理中，請稍候...</div>}
+          {floatingMessage && <div className="floating-message">{floatingMessage}</div>}
+          <h1 className="text-3xl font-bold text-center text-blue-600">員工報到系統 (雲端同步版)</h1>
+          
+           <div className="grid md:grid-cols-2 gap-6">
+            <div className="p-4 bg-white shadow rounded-lg">
+              <h2 className="text-xl font-semibold mb-2 text-gray-700">1. 匯入與管理名單</h2>
+              <label className="block text-sm font-medium mb-1 text-gray-600">選擇名單檔案 (CSV 或 XLSX)</label>
+              <input type="file" ref={fileInputRef} accept=".csv,.xlsx,.xls" onChange={handleFileUpload} disabled={isLoading} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"/>
+              <p className="mt-1 text-xs text-gray-500">檔案欄位: "{ID_COLUMN_NAME_FRONTEND}", "{NAME_COLUMN_NAME_FRONTEND}".</p>
+              <button onClick={handleResetData} disabled={isLoading} className="mt-3 w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50">重置雲端所有資料</button>
+            </div>
+            <div className="p-4 bg-white shadow rounded-lg">
+                <h2 className="text-xl font-semibold mb-2 text-gray-700">2. 報到方式</h2>
+                <div className="space-y-3">
+                    <div> <h3 className="text-md font-semibold text-gray-600">A. 掃描QR Code (攝影機)</h3> <video ref={videoRef} className="w-full max-w-xs mx-auto rounded shadow aspect-square bg-gray-200 mt-1" playsInline /> <p className="mt-1 text-xs text-gray-500 text-center">將QR Code對準鏡頭。</p> </div> <hr/>
+                    <div> <h3 className="text-md font-semibold text-gray-600">B. 手動輸入 / 掃描槍</h3> <form onSubmit={handleManualCheckIn}> <label htmlFor="manualId" className="block text-sm font-medium text-gray-600 sr-only">輸入{ID_COLUMN_NAME_FRONTEND}</label> <input type="text" name="manualId" id="manualId" ref={manualIdInputRef} disabled={isLoading} className="mt-1 border rounded-md px-3 py-2 w-full shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder={`輸入 ${ID_COLUMN_NAME_FRONTEND} 後按 Enter`}/> <button type="submit" className="hidden">報到</button> </form> <p className="mt-1 text-xs text-gray-500">將游標點擊上方輸入框後，可使用掃描槍掃描。</p> </div>
+                </div>
+            </div>
+          </div>
+          <div className="p-4 bg-white shadow rounded-lg">
+            <h2 className="text-xl font-semibold mb-2 text-gray-700">報到統計</h2>
+            {message && <p className={`text-sm p-2 rounded-md mb-2 ${message.includes('失敗') || message.includes('錯誤') || message.includes('無法') || message.includes('無此') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{message}</p>}
+            <p className="text-gray-700">已報到：<span className="font-bold">{checkInCount}</span> / 符合篩選總人數：<span className="font-bold">{filteredAttendees.length}</span> (雲端總人數: {attendees.length})</p>
+            <button onClick={handleExportData} disabled={isLoading || attendees.length === 0} className="mt-2 bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50">匯出目前前端名單 (CSV)</button>
+            <button onClick={() => { setIsLoading(true); fetchAttendees(); }} disabled={isLoading} className="ml-2 mt-2 bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50">重新整理雲端名單</button>
+          </div>
+          { (attendees.length > 0 || isLoading) && (
+            <div className="p-4 bg-white shadow rounded-lg overflow-x-auto">
+              <div className="flex justify-between items-center mb-3"> <h2 className="text-xl font-semibold text-gray-700">參與者名單 (第 {currentPage} / {totalPages > 0 ? totalPages : 1} 頁)</h2> <input type="text" placeholder="搜尋編號或姓名..." value={searchTerm} disabled={isLoading} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} className="border rounded-md px-3 py-1.5 text-sm shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"/> </div>
+              <table className="w-full border-collapse border text-sm">
+                <thead className="bg-gray-200"> <tr> <th className="border p-2 text-left">{ID_COLUMN_NAME_FRONTEND}</th> <th className="border p-2 text-left">{NAME_COLUMN_NAME_FRONTEND}</th> <th className="border p-2 text-center">報到狀態</th> <th className="border p-2 text-center">操作</th> </tr> </thead>
+                <tbody>
+                  {isLoading && paginatedAttendees.length === 0 ? (<tr><td colSpan="4" className="text-center p-4 text-gray-500">從雲端載入名單中...</td></tr>) : 
+                   paginatedAttendees.length > 0 ? paginatedAttendees.map((attendee) => (
+                    <tr key={attendee.id} className={`${attendee.checkedIn ? 'bg-green-50 hover:bg-green-100' : 'bg-white hover:bg-gray-50'} ${isLoading ? 'opacity-50' : ''}`}>
+                      <td className="border p-2">{attendee.id}</td> <td className="border p-2">{attendee.name}</td> <td className={`border p-2 text-center font-semibold ${attendee.checkedIn ? 'text-green-600' : 'text-red-600'}`}>{attendee.checkedIn ? '已報到' : '未報到'}</td>
+                      <td className="border p-2 text-center">
+                        {attendee.checkedIn ? (<button onClick={() => handleUndoCheckIn(attendee.id)} className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-xs disabled:opacity-50" disabled={isLoading}>取消報到</button>) : 
+                                            (<button onClick={() => handleCheckIn(attendee.id)} className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-xs disabled:opacity-50" disabled={isLoading}>報到</button>)}
+                      </td>
+                    </tr>
+                  )) : (<tr><td colSpan="4" className="text-center p-4 text-gray-500">{searchTerm ? '沒有符合搜尋條件的參與者。' : '雲端名單為空或無資料。'}</td></tr>)}
+                </tbody>
+              </table>
+              {renderPaginationControls()}
+            </div>
+          )}
+           <footer className="text-center text-xs text-gray-500 py-4"> 員工報到系統 (雲端版) &copy; {new Date().getFullYear()} </footer>
+        </div>
+      );
+    };
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
